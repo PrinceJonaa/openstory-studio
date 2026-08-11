@@ -203,3 +203,31 @@ class SceneRecord(Base):
     character_entity_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+
+
+class StoryboardPanelRecord(Base):
+    __tablename__ = "storyboard_panels"
+    __table_args__ = (
+        UniqueConstraint("scene_id", "ordinal", name="uq_storyboard_panel_scene_ordinal"),
+        CheckConstraint("ordinal >= 1", name="ck_storyboard_panel_ordinal"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    scene_id: Mapped[str] = mapped_column(
+        ForeignKey("scenes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    shot_type: Mapped[str] = mapped_column(String(200), nullable=False)
+    framing: Mapped[str] = mapped_column(String(500), nullable=False)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    visual_description: Mapped[str] = mapped_column(Text, nullable=False)
+    dialogue: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=False)
+    character_entity_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    location_entity_id: Mapped[str | None] = mapped_column(
+        ForeignKey("canon_entities.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    referenced_asset_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    image_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    negative_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    render_status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)

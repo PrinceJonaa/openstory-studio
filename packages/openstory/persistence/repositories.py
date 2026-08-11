@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,11 @@ from openstory.domain.jobs import Job, JobKind, JobStatus
 from openstory.domain.project import Project, TargetFormat
 from openstory.domain.source import SourceChunk, SourceDocument
 from openstory.domain.status import ProductionStatus
+from openstory.domain.storyboard import (
+    DialogueLine,
+    RenderStatus,
+    StoryboardPanel,
+)
 from openstory.persistence.models import (
     CanonEntityRecord,
     CanonFactRecord,
@@ -27,6 +32,7 @@ from openstory.persistence.models import (
     SceneRecord,
     SourceChunkRecord,
     SourceDocumentRecord,
+    StoryboardPanelRecord,
 )
 
 
@@ -46,6 +52,10 @@ class DuplicateEpisodeNumberError(ValueError):
     def __init__(self, number: int) -> None:
         super().__init__(f"Episode number {number} already exists in this project.")
         self.number = number
+
+
+class StoryboardReplacementError(ValueError):
+    pass
 
 
 def _aware(value: datetime) -> datetime:
@@ -152,6 +162,26 @@ def _scene_from_record(record: SceneRecord) -> Scene:
         location_entity_id=record.location_entity_id,
         character_entity_ids=record.character_entity_ids,
         summary=record.summary,
+        status=ProductionStatus(record.status),
+    )
+
+
+def _storyboard_panel_from_record(record: StoryboardPanelRecord) -> StoryboardPanel:
+    return StoryboardPanel(
+        id=record.id,
+        scene_id=record.scene_id,
+        ordinal=record.ordinal,
+        shot_type=record.shot_type,
+        framing=record.framing,
+        action=record.action,
+        visual_description=record.visual_description,
+        dialogue=[DialogueLine.model_validate(line) for line in record.dialogue],
+        character_entity_ids=record.character_entity_ids,
+        location_entity_id=record.location_entity_id,
+        referenced_asset_ids=record.referenced_asset_ids,
+        image_prompt=record.image_prompt,
+        negative_prompt=record.negative_prompt,
+        render_status=RenderStatus(record.render_status),
         status=ProductionStatus(record.status),
     )
 
@@ -526,6 +556,75 @@ class OpenStoryRepository:
         record.status = target.value
         self.session.commit()
         return _scene_from_record(record)
+
+    def replace_draft_storyboard(
+        self,
+        scene_id: str,
+        panels: Sequence[StoryboardPanel],
+    ) -> list[StoryboardPanel]:
+        existing = self.list_storyboard_panels(scene_id)
+        non_draft = [panel for panel in existing if panel.status is not ProductionStatus.DRAFT]
+        if non_draft:
+            raise StoryboardReplacementError(
+                "Storyboard replacement requires every existing panel to be in draft status."
+            )
+        panel_list = list(panels)
+        if any(panel.scene_id != scene_id for panel in panel_list):
+            raise ValueError("Every storyboard panel must belong to the target scene.")
+        if any(panel.status is not ProductionStatus.DRAFT for panel in panel_list):
+            raise ValueError("New storyboard panels must begin in draft status.")
+
+        self.session.execute(
+            delete(StoryboardPanelRecord).where(StoryboardPanelRecord.scene_id == scene_id)
+        )
+        self.session.add_all(
+            [
+                StoryboardPanelRecord(
+                    id=panel.id,
+                    scene_id=panel.scene_id,
+                    ordinal=panel.ordinal,
+                    shot_type=panel.shot_type,
+                    framing=panel.framing,
+                    action=panel.action,
+                    visual_description=panel.visual_description,
+                    dialogue=[line.model_dump(mode="json") for line in panel.dialogue],
+                    character_entity_ids=panel.character_entity_ids,
+                    location_entity_id=panel.location_entity_id,
+                    referenced_asset_ids=panel.referenced_asset_ids,
+                    image_prompt=panel.image_prompt,
+                    negative_prompt=panel.negative_prompt,
+                    render_status=panel.render_status.value,
+                    status=panel.status.value,
+                )
+                for panel in panel_list
+            ]
+        )
+        self.session.commit()
+        return panel_list
+
+    def list_storyboard_panels(self, scene_id: str) -> list[StoryboardPanel]:
+        records = self.session.scalars(
+            select(StoryboardPanelRecord)
+            .where(StoryboardPanelRecord.scene_id == scene_id)
+            .order_by(StoryboardPanelRecord.ordinal, StoryboardPanelRecord.id)
+        )
+        return [_storyboard_panel_from_record(record) for record in records]
+
+    def get_storyboard_panel(self, panel_id: str) -> StoryboardPanel | None:
+        record = self.session.get(StoryboardPanelRecord, panel_id)
+        return _storyboard_panel_from_record(record) if record is not None else None
+
+    def update_panel_status(
+        self,
+        panel_id: str,
+        target: ProductionStatus,
+    ) -> StoryboardPanel:
+        record = self.session.get(StoryboardPanelRecord, panel_id)
+        if record is None:
+            raise LookupError("Storyboard panel not found.")
+        record.status = target.value
+        self.session.commit()
+        return _storyboard_panel_from_record(record)
 
     def commit(self) -> None:
         self.session.commit()

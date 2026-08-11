@@ -9,7 +9,15 @@ from openstory.providers.text.openai_compatible import OpenAICompatibleTextProvi
 from openstory.services.workspace import WorkspaceManager
 
 from openstory_api.dependencies import Settings, build_text_provider
-from openstory_api.routes import canon, episodes, health, jobs, projects, sources
+from openstory_api.routes import (
+    canon,
+    episodes,
+    health,
+    jobs,
+    projects,
+    sources,
+    storyboards,
+)
 
 
 def create_app(
@@ -54,6 +62,7 @@ def create_app(
     application.include_router(canon.router)
     application.include_router(jobs.router)
     application.include_router(episodes.router)
+    application.include_router(storyboards.router)
     return application
 
 

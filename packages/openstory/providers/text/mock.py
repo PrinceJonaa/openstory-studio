@@ -3,6 +3,7 @@ from typing import Any
 
 from openstory.domain.adaptation import EpisodeAdaptationResponse
 from openstory.domain.canon import CanonExtractionResponse
+from openstory.domain.storyboard import StoryboardBuildResponse
 from openstory.providers.text.base import T
 
 CHAPTER_ONE_CARRY_EVIDENCE = (
@@ -42,6 +43,8 @@ class MockTextProvider:
             return schema.model_validate(self._canon_response(user_prompt))
         if schema is EpisodeAdaptationResponse:
             return schema.model_validate(self._episode_response(user_prompt))
+        if schema is StoryboardBuildResponse:
+            return schema.model_validate(self._storyboard_response(user_prompt))
         return schema.model_validate({})
 
     @staticmethod
@@ -220,6 +223,125 @@ class MockTextProvider:
             ],
         }
 
+    @staticmethod
+    def _storyboard_response(user_prompt: str) -> dict[str, Any]:
+        if "Scene title: The Crossing" not in user_prompt:
+            return _generic_storyboard_response(user_prompt)
+        return {
+            "panels": [
+                {
+                    "ordinal": 1,
+                    "shot_type": "wide",
+                    "framing": "establishing, eye-level",
+                    "action": "Lira and Ashen arrive at the North Gate.",
+                    "visual_description": (
+                        "The ward-bound North Gate towers over a reed-choked causeway as "
+                        "Lira and Ashen approach in late-afternoon light."
+                    ),
+                    "character_refs": ["Lira", "Ashen"],
+                    "location_ref": "North Gate",
+                    "image_prompt": (
+                        "Monochrome production storyboard, wide establishing shot of Lira "
+                        "and Ashen at the towering ward-bound North Gate, clear silhouettes."
+                    ),
+                    "negative_prompt": "photorealistic, illegible composition, text artifacts",
+                },
+                {
+                    "ordinal": 2,
+                    "shot_type": "medium",
+                    "framing": "waist-up, slight low angle",
+                    "action": "Lira raises the wrapped Glass Shard in her palm.",
+                    "visual_description": (
+                        "Lira steps forward and lifts the palm-sized shard toward the gate's "
+                        "glass-etched seals; Ashen watches behind her."
+                    ),
+                    "character_refs": ["Lira", "Ashen"],
+                    "location_ref": "North Gate",
+                    "image_prompt": (
+                        "Storyboard medium shot, Lira raising a wrapped glass shard toward "
+                        "etched gate seals, Ashen behind her, readable gesture."
+                    ),
+                },
+                {
+                    "ordinal": 3,
+                    "shot_type": "medium close-up",
+                    "framing": "guard eyeline, reverse angle",
+                    "action": "The lead guard blocks the path and questions Lira.",
+                    "visual_description": (
+                        "A stern guard fills the foreground while Lira holds her ground "
+                        "beyond his shoulder."
+                    ),
+                    "dialogue": [
+                        {
+                            "speaker_name": "Lead Guard",
+                            "text": "State your purpose.",
+                        }
+                    ],
+                    "character_refs": ["Lira"],
+                    "location_ref": "North Gate",
+                    "image_prompt": (
+                        "Storyboard reverse medium close-up, stern gate guard foreground, "
+                        "Lira beyond his shoulder, strong eyeline."
+                    ),
+                },
+                {
+                    "ordinal": 4,
+                    "shot_type": "extreme close-up",
+                    "framing": "insert shot, centered",
+                    "action": "Cold blue light pulses from the Glass Shard.",
+                    "visual_description": (
+                        "The shard rests in Lira's palm as a sharp blue pulse catches every "
+                        "etched edge and leaps toward the seals."
+                    ),
+                    "character_refs": ["Lira"],
+                    "location_ref": "North Gate",
+                    "image_prompt": (
+                        "Storyboard insert, extreme close-up of glass shard in Lira's palm, "
+                        "blue pulse tracing etched edges, high contrast."
+                    ),
+                },
+                {
+                    "ordinal": 5,
+                    "shot_type": "two-shot",
+                    "framing": "tight profile two-shot",
+                    "action": "Ashen leans toward Lira as the wards begin to react.",
+                    "visual_description": (
+                        "Lira watches the seals while Ashen turns toward her, tension held "
+                        "between their profiles and the growing light."
+                    ),
+                    "dialogue": [
+                        {
+                            "speaker_ref": "Ashen",
+                            "speaker_name": "Ashen",
+                            "text": "The wardens will see this.",
+                        }
+                    ],
+                    "character_refs": ["Lira", "Ashen"],
+                    "location_ref": "North Gate",
+                    "image_prompt": (
+                        "Storyboard tight profile two-shot of Lira and Ashen beside glowing "
+                        "gate seals, controlled tension, clean staging."
+                    ),
+                },
+                {
+                    "ordinal": 6,
+                    "shot_type": "wide",
+                    "framing": "symmetrical reveal",
+                    "action": "The North Gate opens and reveals the passage beyond.",
+                    "visual_description": (
+                        "The seals flare, the massive gate parts, and Lira and Ashen become "
+                        "small silhouettes before the newly opened path."
+                    ),
+                    "character_refs": ["Lira", "Ashen"],
+                    "location_ref": "North Gate",
+                    "image_prompt": (
+                        "Monochrome storyboard wide reveal, North Gate opening symmetrically, "
+                        "Lira and Ashen silhouetted before the passage, luminous seals."
+                    ),
+                },
+            ]
+        }
+
 
 def _unknown_response() -> dict[str, Any]:
     return {
@@ -239,3 +361,25 @@ def _first_source_sentence(user_prompt: str) -> str:
             continue
         return candidate[:2_000]
     return "The selected source begins with a quiet visual beat."
+
+
+def _generic_storyboard_response(user_prompt: str) -> dict[str, Any]:
+    summary = "The scene unfolds in six clear visual beats."
+    marker = "Scene summary: "
+    if marker in user_prompt:
+        summary = user_prompt.split(marker, maxsplit=1)[1].splitlines()[0].strip() or summary
+    shot_types = ["wide", "medium", "close-up", "insert", "two-shot", "wide"]
+    return {
+        "panels": [
+            {
+                "ordinal": index,
+                "shot_type": shot_type,
+                "framing": "clear production framing",
+                "action": f"Visual beat {index} advances the scene.",
+                "visual_description": summary,
+                "character_refs": [],
+                "image_prompt": f"Production storyboard panel {index}: {summary}",
+            }
+            for index, shot_type in enumerate(shot_types, start=1)
+        ]
+    }
