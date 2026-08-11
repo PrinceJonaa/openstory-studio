@@ -7,7 +7,7 @@ from openstory.persistence.db import create_db_engine, init_db, make_session_fac
 from openstory.services.workspace import WorkspaceManager
 
 from openstory_api.dependencies import Settings
-from openstory_api.routes import health, projects
+from openstory_api.routes import health, projects, sources
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -35,8 +35,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.include_router(health.router)
     application.include_router(projects.router)
+    application.include_router(sources.router)
     return application
 
 
 app = create_app()
-
