@@ -249,6 +249,19 @@ def get_render_file(
     return FileResponse(output_path, media_type="image/png", filename=output_path.name)
 
 
+@router.get("/panels/{panel_id}/renders", response_model=list[RenderVersion])
+def list_panel_renders(
+    panel_id: str,
+    repository: RepositoryDependency,
+) -> list[RenderVersion]:
+    if repository.get_storyboard_panel(panel_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Storyboard panel not found.",
+        )
+    return repository.list_render_versions(panel_id)
+
+
 @router.patch("/renders/{render_id}/status", response_model=RenderVersion)
 def update_render_status(
     render_id: str,

@@ -60,6 +60,9 @@ async def test_panel_render_api_creates_versioned_png_and_serves_it(
     assert second_render["version"] == 2
     assert first_render["output_path"] != second_render["output_path"]
     assert first_render["metadata"]["panel_ordinal"] == 1
+    listed_renders = await api_client.get(f"/panels/{panel['id']}/renders")
+    assert listed_renders.status_code == 200
+    assert listed_renders.json() == [first_render, second_render]
     file_response = await api_client.get(f"/renders/{first_render['id']}/file")
     assert file_response.status_code == 200
     assert file_response.headers["content-type"] == "image/png"

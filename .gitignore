@@ -12,6 +12,7 @@ dist/
 build/
 *.egg-info/
 node_modules/
+*.tsbuildinfo
 apps/web/dist/
 workspaces/*
 !workspaces/.gitkeep

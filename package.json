@@ -6,9 +6,9 @@
     "apps/web"
   ],
   "scripts": {
+    "dev": "npm --workspace @openstory/web run dev --",
     "web:dev": "npm --workspace @openstory/web run dev",
     "web:build": "npm --workspace @openstory/web run build",
-    "web:test": "npm --workspace @openstory/web run test"
+    "web:test": "npm --workspace @openstory/web run test --"
   }
 }
-
