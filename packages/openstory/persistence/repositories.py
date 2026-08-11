@@ -1,9 +1,11 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from openstory.domain.adaptation import Episode, Scene
 from openstory.domain.canon import (
     CanonEntity,
     CanonFact,
@@ -15,11 +17,14 @@ from openstory.domain.ids import new_id
 from openstory.domain.jobs import Job, JobKind, JobStatus
 from openstory.domain.project import Project, TargetFormat
 from openstory.domain.source import SourceChunk, SourceDocument
+from openstory.domain.status import ProductionStatus
 from openstory.persistence.models import (
     CanonEntityRecord,
     CanonFactRecord,
+    EpisodeRecord,
     JobRecord,
     ProjectRecord,
+    SceneRecord,
     SourceChunkRecord,
     SourceDocumentRecord,
 )
@@ -35,6 +40,12 @@ class DuplicateSourceHashError(ValueError):
     def __init__(self, sha256: str) -> None:
         super().__init__("This source content is already imported in the project.")
         self.sha256 = sha256
+
+
+class DuplicateEpisodeNumberError(ValueError):
+    def __init__(self, number: int) -> None:
+        super().__init__(f"Episode number {number} already exists in this project.")
+        self.number = number
 
 
 def _aware(value: datetime) -> datetime:
@@ -115,6 +126,33 @@ def _job_from_record(record: JobRecord) -> Job:
         error=record.error,
         created_at=_aware(record.created_at),
         updated_at=_aware(record.updated_at),
+    )
+
+
+def _episode_from_record(record: EpisodeRecord) -> Episode:
+    return Episode(
+        id=record.id,
+        project_id=record.project_id,
+        number=record.number,
+        title=record.title,
+        source_chunk_ids=record.source_chunk_ids,
+        logline=record.logline,
+        adaptation_notes=record.adaptation_notes,
+        status=ProductionStatus(record.status),
+    )
+
+
+def _scene_from_record(record: SceneRecord) -> Scene:
+    return Scene(
+        id=record.id,
+        episode_id=record.episode_id,
+        ordinal=record.ordinal,
+        title=record.title,
+        purpose=record.purpose,
+        location_entity_id=record.location_entity_id,
+        character_entity_ids=record.character_entity_ids,
+        summary=record.summary,
+        status=ProductionStatus(record.status),
     )
 
 
@@ -399,6 +437,95 @@ class OpenStoryRepository:
             .order_by(JobRecord.created_at, JobRecord.id)
         )
         return [_job_from_record(record) for record in records]
+
+    def add_episode(
+        self,
+        episode: Episode,
+        scenes: Sequence[Scene],
+    ) -> tuple[Episode, list[Scene]]:
+        self.session.add(
+            EpisodeRecord(
+                id=episode.id,
+                project_id=episode.project_id,
+                number=episode.number,
+                title=episode.title,
+                source_chunk_ids=episode.source_chunk_ids,
+                logline=episode.logline,
+                adaptation_notes=episode.adaptation_notes,
+                status=episode.status.value,
+            )
+        )
+        scene_list = list(scenes)
+        self.session.add_all(
+            [
+                SceneRecord(
+                    id=scene.id,
+                    episode_id=scene.episode_id,
+                    ordinal=scene.ordinal,
+                    title=scene.title,
+                    purpose=scene.purpose,
+                    location_entity_id=scene.location_entity_id,
+                    character_entity_ids=scene.character_entity_ids,
+                    summary=scene.summary,
+                    status=scene.status.value,
+                )
+                for scene in scene_list
+            ]
+        )
+        try:
+            self.session.commit()
+        except IntegrityError as error:
+            self.session.rollback()
+            raise DuplicateEpisodeNumberError(episode.number) from error
+        return episode, scene_list
+
+    def list_episodes(self, project_id: str) -> list[Episode]:
+        records = self.session.scalars(
+            select(EpisodeRecord)
+            .where(EpisodeRecord.project_id == project_id)
+            .order_by(EpisodeRecord.number, EpisodeRecord.id)
+        )
+        return [_episode_from_record(record) for record in records]
+
+    def get_episode(self, episode_id: str) -> Episode | None:
+        record = self.session.get(EpisodeRecord, episode_id)
+        return _episode_from_record(record) if record is not None else None
+
+    def list_scenes(self, episode_id: str) -> list[Scene]:
+        records = self.session.scalars(
+            select(SceneRecord)
+            .where(SceneRecord.episode_id == episode_id)
+            .order_by(SceneRecord.ordinal, SceneRecord.id)
+        )
+        return [_scene_from_record(record) for record in records]
+
+    def get_scene(self, scene_id: str) -> Scene | None:
+        record = self.session.get(SceneRecord, scene_id)
+        return _scene_from_record(record) if record is not None else None
+
+    def update_episode_status(
+        self,
+        episode_id: str,
+        target: ProductionStatus,
+    ) -> Episode:
+        record = self.session.get(EpisodeRecord, episode_id)
+        if record is None:
+            raise LookupError("Episode not found.")
+        record.status = target.value
+        self.session.commit()
+        return _episode_from_record(record)
+
+    def update_scene_status(
+        self,
+        scene_id: str,
+        target: ProductionStatus,
+    ) -> Scene:
+        record = self.session.get(SceneRecord, scene_id)
+        if record is None:
+            raise LookupError("Scene not found.")
+        record.status = target.value
+        self.session.commit()
+        return _scene_from_record(record)
 
     def commit(self) -> None:
         self.session.commit()

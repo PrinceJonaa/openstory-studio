@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from typing import Any
 
+from openstory.domain.adaptation import EpisodeAdaptationResponse
 from openstory.domain.canon import CanonExtractionResponse
 from openstory.providers.text.base import T
 
@@ -39,6 +40,8 @@ class MockTextProvider:
             return schema.model_validate(override)
         if schema is CanonExtractionResponse:
             return schema.model_validate(self._canon_response(user_prompt))
+        if schema is EpisodeAdaptationResponse:
+            return schema.model_validate(self._episode_response(user_prompt))
         return schema.model_validate({})
 
     @staticmethod
@@ -127,6 +130,13 @@ class MockTextProvider:
                         "confidence": 0.98,
                     },
                     {
+                        "subject_ref": "ashen",
+                        "predicate": "reached",
+                        "object_ref": "north_gate",
+                        "evidence": CHAPTER_TWO_ARRIVAL_EVIDENCE,
+                        "confidence": 0.98,
+                    },
+                    {
                         "subject_ref": "north_gate",
                         "predicate": "opened_in_response_to",
                         "value": "Glass Shard cold blue pulse",
@@ -144,6 +154,72 @@ class MockTextProvider:
             "unresolved_references": [],
         }
 
+    @staticmethod
+    def _episode_response(user_prompt: str) -> dict[str, Any]:
+        has_shard = CHAPTER_ONE_CARRY_EVIDENCE in user_prompt
+        has_crossing = CHAPTER_TWO_ARRIVAL_EVIDENCE in user_prompt
+        scenes: list[dict[str, Any]] = []
+        if has_shard:
+            scenes.append(
+                {
+                    "ordinal": len(scenes) + 1,
+                    "title": "The Shard Awakens",
+                    "purpose": "Introduce Lira, Ashen, and the shard's dangerous response.",
+                    "character_refs": ["Lira", "Ashen"],
+                    "summary": (
+                        "Lira reveals the Glass Shard and wakes its cold blue light; "
+                        "Ashen warns that the wardens may notice."
+                    ),
+                }
+            )
+        if has_crossing:
+            scenes.append(
+                {
+                    "ordinal": len(scenes) + 1,
+                    "title": "The Crossing",
+                    "purpose": "Turn the shard's power into a visible crossing of the city wards.",
+                    "location_ref": "North Gate",
+                    "character_refs": ["Lira", "Ashen"],
+                    "summary": (
+                        "At the North Gate, Lira raises the Glass Shard; its pulse crosses "
+                        "the seals and opens the way."
+                    ),
+                }
+            )
+        if scenes:
+            title = "The Crossing" if has_crossing else "The Shard"
+            return {
+                "episode": {
+                    "title": title,
+                    "logline": (
+                        "Lira risks exposing a mysterious heirloom to pass a ward-bound gate."
+                    ),
+                    "adaptation_notes": (
+                        "Omissions: incidental guard dialogue is compressed. "
+                        "Reordering: none; causal order is preserved."
+                    ),
+                },
+                "scenes": scenes,
+            }
+
+        first_sentence = _first_source_sentence(user_prompt)
+        return {
+            "episode": {
+                "title": "Adapted Episode",
+                "logline": first_sentence,
+                "adaptation_notes": "Omissions: none. Reordering: none.",
+            },
+            "scenes": [
+                {
+                    "ordinal": 1,
+                    "title": "Opening Beat",
+                    "purpose": "Visualize the first explicit source beat.",
+                    "summary": first_sentence,
+                    "character_refs": [],
+                }
+            ],
+        }
+
 
 def _unknown_response() -> dict[str, Any]:
     return {
@@ -153,3 +229,13 @@ def _unknown_response() -> dict[str, Any]:
             "Mock mode has no fixture extraction for this source chunk."
         ],
     }
+
+
+def _first_source_sentence(user_prompt: str) -> str:
+    source = user_prompt.split("SOURCE CHUNKS:\n", maxsplit=1)[-1]
+    for line in source.splitlines():
+        candidate = line.strip()
+        if not candidate or candidate.startswith(("---", "#", "_")):
+            continue
+        return candidate[:2_000]
+    return "The selected source begins with a quiet visual beat."

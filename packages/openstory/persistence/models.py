@@ -162,3 +162,44 @@ class JobRecord(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EpisodeRecord(Base):
+    __tablename__ = "episodes"
+    __table_args__ = (
+        UniqueConstraint("project_id", "number", name="uq_episode_project_number"),
+        CheckConstraint("number >= 1", name="ck_episode_number"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    source_chunk_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    logline: Mapped[str] = mapped_column(Text, nullable=False)
+    adaptation_notes: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+
+
+class SceneRecord(Base):
+    __tablename__ = "scenes"
+    __table_args__ = (
+        UniqueConstraint("episode_id", "ordinal", name="uq_scene_episode_ordinal"),
+        CheckConstraint("ordinal >= 1", name="ck_scene_ordinal"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    episode_id: Mapped[str] = mapped_column(
+        ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    purpose: Mapped[str] = mapped_column(Text, nullable=False)
+    location_entity_id: Mapped[str | None] = mapped_column(
+        ForeignKey("canon_entities.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    character_entity_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
