@@ -21,6 +21,10 @@ from openstory.domain.status import (
 )
 from openstory.domain.storyboard import StoryboardPanel
 from openstory.persistence.repositories import StoryboardReplacementError
+from openstory.providers.image.base import (
+    ImageGenerationError,
+    ImageProviderUnavailableError,
+)
 from openstory.services.workspace import UnsafeWorkspacePathError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -172,6 +176,13 @@ async def render_panel(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(error),
         ) from error
+    except ImageProviderUnavailableError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
+    except ImageGenerationError as error:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(error)) from error
 
 
 @router.post(
@@ -221,6 +232,13 @@ async def render_scene(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(error),
         ) from error
+    except ImageProviderUnavailableError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
+    except ImageGenerationError as error:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(error)) from error
 
 
 @router.get("/renders/{render_id}/file", response_class=FileResponse)

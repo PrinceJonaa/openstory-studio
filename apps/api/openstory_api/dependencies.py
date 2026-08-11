@@ -6,6 +6,7 @@ import httpx
 from fastapi import Depends, Request
 from openstory.persistence.repositories import OpenStoryRepository
 from openstory.providers.image.base import ImageGenerationProvider
+from openstory.providers.image.mlxgen import MLXGenImageProvider
 from openstory.providers.image.placeholder import PlaceholderImageProvider
 from openstory.providers.text.base import TextGenerationProvider
 from openstory.providers.text.mock import MockTextProvider
@@ -26,6 +27,8 @@ class Settings(BaseSettings):
     text_api_key: str = "local"
     text_model: str = "local-model"
     image_provider: str = "placeholder"
+    mlxgen_executable: str = "mlxgen"
+    mlxgen_model: str = "AbstractFramework/flux.2-klein-9b-8bit"
     cors_origins: list[str] = [
         "http://127.0.0.1:5173",
         "http://localhost:5173",
@@ -66,8 +69,14 @@ def build_text_provider(settings: Settings) -> TextGenerationProvider:
 def build_image_provider(settings: Settings) -> ImageGenerationProvider:
     if settings.image_provider == "placeholder":
         return PlaceholderImageProvider()
+    if settings.image_provider == "mlxgen":
+        return MLXGenImageProvider(
+            executable=settings.mlxgen_executable,
+            model=settings.mlxgen_model,
+        )
     raise ImageProviderConfigurationError(
-        f"Unknown image provider '{settings.image_provider}'. Expected 'placeholder'."
+        f"Unknown image provider '{settings.image_provider}'. "
+        "Expected 'placeholder' or 'mlxgen'."
     )
 
 

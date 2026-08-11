@@ -4,7 +4,14 @@ from typing import Any
 
 import httpx
 import pytest
+from fastapi import FastAPI
+from openstory.providers.image.base import ImageProviderUnavailableError
 from PIL import Image
+
+
+class UnavailableImageProvider:
+    async def generate(self, **_kwargs: object) -> None:
+        raise ImageProviderUnavailableError("Configured image provider is unavailable.")
 
 
 async def prepare_storyboard(
@@ -138,3 +145,22 @@ async def test_locked_panel_render_is_rejected_without_new_file(
     assert response.status_code == 409
     jobs = (await api_client.get(f"/projects/{project_id}/jobs")).json()
     assert jobs[-1]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_unavailable_image_provider_returns_503_and_records_failed_job(
+    api_client: httpx.AsyncClient,
+    api_app: FastAPI,
+    api_project: dict[str, object],
+) -> None:
+    project_id = str(api_project["id"])
+    _scene, panels = await prepare_storyboard(api_client, project_id)
+    api_app.state.image_provider = UnavailableImageProvider()
+
+    response = await api_client.post(f"/panels/{panels[0]['id']}/render", json={})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Configured image provider is unavailable."
+    jobs = (await api_client.get(f"/projects/{project_id}/jobs")).json()
+    assert jobs[-1]["status"] == "failed"
+    assert jobs[-1]["error"] == "Configured image provider is unavailable."
