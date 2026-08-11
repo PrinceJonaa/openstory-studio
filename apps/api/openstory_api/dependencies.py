@@ -13,7 +13,7 @@ from openstory.providers.text.mock import MockTextProvider
 from openstory.providers.text.openai_compatible import OpenAICompatibleTextProvider
 from openstory.services.workspace import WorkspaceManager
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.orm import Session
 
 
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     image_provider: str = "placeholder"
     mlxgen_executable: str = "mlxgen"
     mlxgen_model: str = "AbstractFramework/flux.2-klein-9b-8bit"
-    cors_origins: list[str] = [
+    cors_origins: Annotated[list[str], NoDecode] = [
         "http://127.0.0.1:5173",
         "http://localhost:5173",
     ]

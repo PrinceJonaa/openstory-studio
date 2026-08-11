@@ -33,6 +33,23 @@ async def test_mock_provider_is_deterministic() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mock_provider_recognizes_fixture_evidence_independent_of_project_name() -> None:
+    source = Path("tests/fixtures/glass_orchard.md").read_text()
+
+    response = await MockTextProvider().generate_structured(
+        system_prompt="archivist",
+        user_prompt=f"Project: Smoke Demo\n\n{source}",
+        schema=CanonExtractionResponse,
+    )
+
+    assert {entity.canonical_name for entity in response.entities} >= {
+        "Lira",
+        "North Gate",
+        "Glass Shard",
+    }
+
+
+@pytest.mark.asyncio
 async def test_mock_provider_returns_an_unresolved_reference_for_unknown_text() -> None:
     response = await MockTextProvider().generate_structured(
         system_prompt="archivist",

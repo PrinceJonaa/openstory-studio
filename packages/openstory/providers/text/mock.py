@@ -49,9 +49,6 @@ class MockTextProvider:
 
     @staticmethod
     def _canon_response(user_prompt: str) -> dict[str, Any]:
-        if "The Glass Orchard" not in user_prompt:
-            return _unknown_response()
-
         entities: list[dict[str, Any]] = []
         facts: list[dict[str, Any]] = []
         if CHAPTER_ONE_CARRY_EVIDENCE in user_prompt:
