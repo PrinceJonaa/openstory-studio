@@ -5,10 +5,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openstory.persistence.db import create_db_engine, init_db, make_session_factory
 from openstory.providers.text.base import TextGenerationProvider
-from openstory.providers.text.mock import MockTextProvider
+from openstory.providers.text.openai_compatible import OpenAICompatibleTextProvider
 from openstory.services.workspace import WorkspaceManager
 
-from openstory_api.dependencies import Settings
+from openstory_api.dependencies import Settings, build_text_provider
 from openstory_api.routes import canon, health, jobs, projects, sources
 
 
@@ -20,18 +20,27 @@ def create_app(
     engine = create_db_engine(resolved_settings.database_url)
     session_factory = make_session_factory(engine)
     workspace_manager = WorkspaceManager(resolved_settings.workspace_root)
+    resolved_text_provider = text_provider or build_text_provider(resolved_settings)
+    owns_text_provider = text_provider is None
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         init_db(engine)
         workspace_manager.root.mkdir(parents=True, exist_ok=True)
-        yield
-        engine.dispose()
+        try:
+            yield
+        finally:
+            engine.dispose()
+            if owns_text_provider and isinstance(
+                resolved_text_provider,
+                OpenAICompatibleTextProvider,
+            ):
+                await resolved_text_provider.aclose()
 
     application = FastAPI(title="OpenStory Studio API", lifespan=lifespan)
     application.state.session_factory = session_factory
     application.state.workspace_manager = workspace_manager
-    application.state.text_provider = text_provider or MockTextProvider()
+    application.state.text_provider = resolved_text_provider
     application.add_middleware(
         CORSMiddleware,
         allow_origins=resolved_settings.cors_origins,
