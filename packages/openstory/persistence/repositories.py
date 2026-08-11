@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from openstory.domain.adaptation import Episode, Scene
+from openstory.domain.assets import RenderVersion
 from openstory.domain.canon import (
     CanonEntity,
     CanonFact,
@@ -29,6 +30,7 @@ from openstory.persistence.models import (
     EpisodeRecord,
     JobRecord,
     ProjectRecord,
+    RenderVersionRecord,
     SceneRecord,
     SourceChunkRecord,
     SourceDocumentRecord,
@@ -55,6 +57,10 @@ class DuplicateEpisodeNumberError(ValueError):
 
 
 class StoryboardReplacementError(ValueError):
+    pass
+
+
+class RenderVersionCollisionError(ValueError):
     pass
 
 
@@ -183,6 +189,22 @@ def _storyboard_panel_from_record(record: StoryboardPanelRecord) -> StoryboardPa
         negative_prompt=record.negative_prompt,
         render_status=RenderStatus(record.render_status),
         status=ProductionStatus(record.status),
+    )
+
+
+def _render_version_from_record(record: RenderVersionRecord) -> RenderVersion:
+    return RenderVersion(
+        id=record.id,
+        panel_id=record.panel_id,
+        version=record.version,
+        output_path=record.output_path,
+        width=record.width,
+        height=record.height,
+        seed=record.seed,
+        provider=record.provider,
+        metadata=record.metadata_json,
+        status=ProductionStatus(record.status),
+        created_at=_aware(record.created_at),
     )
 
 
@@ -361,6 +383,24 @@ class OpenStoryRepository:
         records = self.session.scalars(
             select(CanonEntityRecord)
             .where(CanonEntityRecord.project_id == project_id)
+            .order_by(CanonEntityRecord.normalized_name, CanonEntityRecord.id)
+        )
+        return [_canon_entity_from_record(record) for record in records]
+
+    def get_canon_entities_by_ids(
+        self,
+        project_id: str,
+        entity_ids: Sequence[str],
+    ) -> list[CanonEntity]:
+        unique_ids = set(entity_ids)
+        if not unique_ids:
+            return []
+        records = self.session.scalars(
+            select(CanonEntityRecord)
+            .where(
+                CanonEntityRecord.project_id == project_id,
+                CanonEntityRecord.id.in_(unique_ids),
+            )
             .order_by(CanonEntityRecord.normalized_name, CanonEntityRecord.id)
         )
         return [_canon_entity_from_record(record) for record in records]
@@ -625,6 +665,67 @@ class OpenStoryRepository:
         record.status = target.value
         self.session.commit()
         return _storyboard_panel_from_record(record)
+
+    def next_render_version(self, panel_id: str) -> int:
+        maximum = self.session.scalar(
+            select(func.max(RenderVersionRecord.version)).where(
+                RenderVersionRecord.panel_id == panel_id
+            )
+        )
+        return int(maximum or 0) + 1
+
+    def add_render_version(self, render: RenderVersion) -> RenderVersion:
+        panel_record = self.session.get(StoryboardPanelRecord, render.panel_id)
+        if panel_record is None:
+            raise LookupError("Storyboard panel not found.")
+        self.session.add(
+            RenderVersionRecord(
+                id=render.id,
+                panel_id=render.panel_id,
+                version=render.version,
+                output_path=render.output_path,
+                width=render.width,
+                height=render.height,
+                seed=render.seed,
+                provider=render.provider,
+                metadata_json=render.metadata,
+                status=render.status.value,
+                created_at=render.created_at,
+            )
+        )
+        panel_record.render_status = RenderStatus.RENDERED.value
+        try:
+            self.session.commit()
+        except IntegrityError as error:
+            self.session.rollback()
+            raise RenderVersionCollisionError(
+                f"Render version {render.version} already exists for this panel."
+            ) from error
+        return render
+
+    def list_render_versions(self, panel_id: str) -> list[RenderVersion]:
+        records = self.session.scalars(
+            select(RenderVersionRecord)
+            .where(RenderVersionRecord.panel_id == panel_id)
+            .order_by(RenderVersionRecord.version, RenderVersionRecord.id)
+        )
+        return [_render_version_from_record(record) for record in records]
+
+    def get_render_version(self, render_id: str) -> RenderVersion | None:
+        record = self.session.get(RenderVersionRecord, render_id)
+        return _render_version_from_record(record) if record is not None else None
+
+    def update_render_status(
+        self,
+        render_id: str,
+        target: ProductionStatus,
+    ) -> RenderVersion:
+        record = self.session.get(RenderVersionRecord, render_id)
+        if record is None:
+            raise LookupError("Render version not found.")
+        record.status = target.value
+        self.session.commit()
+        return _render_version_from_record(record)
 
     def commit(self) -> None:
         self.session.commit()

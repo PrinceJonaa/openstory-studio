@@ -32,6 +32,31 @@ class WorkspaceManager:
             raise UnsafeWorkspacePathError("Source path escapes the project source directory.")
         return candidate
 
+    def render_path(
+        self,
+        project_id: str,
+        scene_id: str,
+        panel_ordinal: int,
+        version: int,
+    ) -> Path:
+        render_root = (self.project_root(project_id) / "renders").resolve()
+        candidate = (
+            render_root
+            / scene_id
+            / f"panel-{panel_ordinal:04d}"
+            / f"v{version:03d}.png"
+        ).resolve()
+        if not candidate.is_relative_to(render_root):
+            raise UnsafeWorkspacePathError("Render path escapes the project render directory.")
+        return candidate
+
+    def resolve_project_file(self, project_id: str, persisted_path: str) -> Path:
+        project_root = self.project_root(project_id)
+        candidate = Path(persisted_path).expanduser().resolve()
+        if not candidate.is_relative_to(project_root):
+            raise UnsafeWorkspacePathError("Persisted file path escapes the project workspace.")
+        return candidate
+
     def remove_project(self, project_id: str) -> None:
         project_root = self.project_root(project_id)
         if project_root.exists():

@@ -5,6 +5,8 @@ from typing import Annotated, cast
 import httpx
 from fastapi import Depends, Request
 from openstory.persistence.repositories import OpenStoryRepository
+from openstory.providers.image.base import ImageGenerationProvider
+from openstory.providers.image.placeholder import PlaceholderImageProvider
 from openstory.providers.text.base import TextGenerationProvider
 from openstory.providers.text.mock import MockTextProvider
 from openstory.providers.text.openai_compatible import OpenAICompatibleTextProvider
@@ -23,6 +25,7 @@ class Settings(BaseSettings):
     text_base_url: str = "http://127.0.0.1:8080/v1"
     text_api_key: str = "local"
     text_model: str = "local-model"
+    image_provider: str = "placeholder"
     cors_origins: list[str] = [
         "http://127.0.0.1:5173",
         "http://localhost:5173",
@@ -40,6 +43,10 @@ class TextProviderConfigurationError(ValueError):
     pass
 
 
+class ImageProviderConfigurationError(ValueError):
+    pass
+
+
 def build_text_provider(settings: Settings) -> TextGenerationProvider:
     if settings.text_provider == "mock":
         return MockTextProvider()
@@ -53,6 +60,14 @@ def build_text_provider(settings: Settings) -> TextGenerationProvider:
     raise TextProviderConfigurationError(
         f"Unknown text provider '{settings.text_provider}'. "
         "Expected 'mock' or 'openai_compatible'."
+    )
+
+
+def build_image_provider(settings: Settings) -> ImageGenerationProvider:
+    if settings.image_provider == "placeholder":
+        return PlaceholderImageProvider()
+    raise ImageProviderConfigurationError(
+        f"Unknown image provider '{settings.image_provider}'. Expected 'placeholder'."
     )
 
 
@@ -76,6 +91,11 @@ def get_text_provider(request: Request) -> TextGenerationProvider:
     return cast(TextGenerationProvider, request.app.state.text_provider)
 
 
+def get_image_provider(request: Request) -> ImageGenerationProvider:
+    return cast(ImageGenerationProvider, request.app.state.image_provider)
+
+
 RepositoryDependency = Annotated[OpenStoryRepository, Depends(get_repository)]
 WorkspaceDependency = Annotated[WorkspaceManager, Depends(get_workspace_manager)]
 TextProviderDependency = Annotated[TextGenerationProvider, Depends(get_text_provider)]
+ImageProviderDependency = Annotated[ImageGenerationProvider, Depends(get_image_provider)]

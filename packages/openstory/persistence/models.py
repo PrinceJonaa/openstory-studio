@@ -231,3 +231,26 @@ class StoryboardPanelRecord(Base):
     negative_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     render_status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+
+
+class RenderVersionRecord(Base):
+    __tablename__ = "render_versions"
+    __table_args__ = (
+        UniqueConstraint("panel_id", "version", name="uq_render_version_panel_version"),
+        CheckConstraint("version >= 1", name="ck_render_version_number"),
+        CheckConstraint("width > 0 AND height > 0", name="ck_render_version_dimensions"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    panel_id: Mapped[str] = mapped_column(
+        ForeignKey("storyboard_panels.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    output_path: Mapped[str] = mapped_column(Text, nullable=False)
+    width: Mapped[int] = mapped_column(Integer, nullable=False)
+    height: Mapped[int] = mapped_column(Integer, nullable=False)
+    seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

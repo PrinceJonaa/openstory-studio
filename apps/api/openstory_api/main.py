@@ -4,11 +4,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openstory.persistence.db import create_db_engine, init_db, make_session_factory
+from openstory.providers.image.base import ImageGenerationProvider
 from openstory.providers.text.base import TextGenerationProvider
 from openstory.providers.text.openai_compatible import OpenAICompatibleTextProvider
 from openstory.services.workspace import WorkspaceManager
 
-from openstory_api.dependencies import Settings, build_text_provider
+from openstory_api.dependencies import Settings, build_image_provider, build_text_provider
 from openstory_api.routes import (
     canon,
     episodes,
@@ -23,12 +24,14 @@ from openstory_api.routes import (
 def create_app(
     settings: Settings | None = None,
     text_provider: TextGenerationProvider | None = None,
+    image_provider: ImageGenerationProvider | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     engine = create_db_engine(resolved_settings.database_url)
     session_factory = make_session_factory(engine)
     workspace_manager = WorkspaceManager(resolved_settings.workspace_root)
     resolved_text_provider = text_provider or build_text_provider(resolved_settings)
+    resolved_image_provider = image_provider or build_image_provider(resolved_settings)
     owns_text_provider = text_provider is None
 
     @asynccontextmanager
@@ -49,6 +52,7 @@ def create_app(
     application.state.session_factory = session_factory
     application.state.workspace_manager = workspace_manager
     application.state.text_provider = resolved_text_provider
+    application.state.image_provider = resolved_image_provider
     application.add_middleware(
         CORSMiddleware,
         allow_origins=resolved_settings.cors_origins,
