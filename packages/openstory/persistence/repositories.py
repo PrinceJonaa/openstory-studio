@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -710,6 +711,25 @@ class OpenStoryRepository:
             .order_by(RenderVersionRecord.version, RenderVersionRecord.id)
         )
         return [_render_version_from_record(record) for record in records]
+
+    def select_export_render(self, panel_id: str) -> RenderVersion | None:
+        priority = {
+            ProductionStatus.DRAFT: 0,
+            ProductionStatus.REVISE: 1,
+            ProductionStatus.REVIEW: 2,
+            ProductionStatus.APPROVED: 3,
+            ProductionStatus.LOCKED: 4,
+        }
+        available = [
+            render
+            for render in self.list_render_versions(panel_id)
+            if Path(render.output_path).is_file()
+        ]
+        return max(
+            available,
+            key=lambda render: (priority[render.status], render.version),
+            default=None,
+        )
 
     def get_render_version(self, render_id: str) -> RenderVersion | None:
         record = self.session.get(RenderVersionRecord, render_id)

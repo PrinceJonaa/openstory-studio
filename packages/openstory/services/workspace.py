@@ -50,6 +50,13 @@ class WorkspaceManager:
             raise UnsafeWorkspacePathError("Render path escapes the project render directory.")
         return candidate
 
+    def episode_export_root(self, project_id: str, episode_id: str) -> Path:
+        export_root = (self.project_root(project_id) / "exports").resolve()
+        candidate = (export_root / episode_id).resolve()
+        if not candidate.is_relative_to(export_root):
+            raise UnsafeWorkspacePathError("Episode export path escapes the exports directory.")
+        return candidate
+
     def resolve_project_file(self, project_id: str, persisted_path: str) -> Path:
         project_root = self.project_root(project_id)
         candidate = Path(persisted_path).expanduser().resolve()

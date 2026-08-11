@@ -13,6 +13,7 @@ from openstory_api.dependencies import Settings, build_image_provider, build_tex
 from openstory_api.routes import (
     canon,
     episodes,
+    exports,
     health,
     jobs,
     projects,
@@ -67,6 +68,7 @@ def create_app(
     application.include_router(jobs.router)
     application.include_router(episodes.router)
     application.include_router(storyboards.router)
+    application.include_router(exports.router)
     return application
 
 
