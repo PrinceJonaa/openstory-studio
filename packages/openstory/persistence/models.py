@@ -101,6 +101,19 @@ class CanonFactRecord(Base):
             "length(trim(evidence)) > 0",
             name="ck_canon_fact_evidence",
         ),
+        CheckConstraint(
+            "valid_from_ordinal IS NULL OR valid_from_ordinal >= 0",
+            name="ck_canon_fact_valid_from_nonnegative",
+        ),
+        CheckConstraint(
+            "valid_to_ordinal IS NULL OR valid_to_ordinal >= 0",
+            name="ck_canon_fact_valid_to_nonnegative",
+        ),
+        CheckConstraint(
+            "valid_from_ordinal IS NULL OR valid_to_ordinal IS NULL "
+            "OR valid_from_ordinal <= valid_to_ordinal",
+            name="ck_canon_fact_temporal_range",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

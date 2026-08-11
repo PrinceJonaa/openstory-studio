@@ -1,11 +1,18 @@
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, status
 from openstory.application.extract_canon import (
     ExtractCanonService,
     ExtractionValidationError,
     SourceChunkSelectionError,
 )
 from openstory.application.run_job import RunJobService
-from openstory.domain.canon import CanonEntity, CanonExtractionResult, CanonFact
+from openstory.domain.canon import (
+    CanonEntity,
+    CanonExtractionResult,
+    CanonFact,
+    CanonSnapshot,
+)
 from openstory.domain.jobs import JobKind, JobRunResult
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -80,3 +87,14 @@ def list_facts(
     if repository.get_project(project_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
     return repository.list_canon_facts(project_id)
+
+
+@router.get("/projects/{project_id}/canon/snapshot", response_model=CanonSnapshot)
+def get_canon_snapshot(
+    project_id: str,
+    ordinal: Annotated[int, Query(ge=0)],
+    repository: RepositoryDependency,
+) -> CanonSnapshot:
+    if repository.get_project(project_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
+    return repository.get_canon_snapshot(project_id, ordinal)

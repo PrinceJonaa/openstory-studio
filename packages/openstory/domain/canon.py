@@ -42,8 +42,8 @@ class CanonFact(BaseModel):
     predicate: str = Field(min_length=1, max_length=300)
     object_entity_id: str | None = None
     value: Any | None = None
-    valid_from_ordinal: int | None = None
-    valid_to_ordinal: int | None = None
+    valid_from_ordinal: int | None = Field(default=None, ge=0)
+    valid_to_ordinal: int | None = Field(default=None, ge=0)
     source_chunk_id: str = Field(min_length=1)
     evidence: str = Field(min_length=1)
     confidence: float = Field(ge=0, le=1)
@@ -59,6 +59,16 @@ class CanonFact(BaseModel):
     def requires_object_or_value(self) -> "CanonFact":
         if self.object_entity_id is None and self.value is None:
             raise ValueError("A canon fact requires an object entity or a value.")
+        return self
+
+    @model_validator(mode="after")
+    def temporal_range_is_ordered(self) -> "CanonFact":
+        if (
+            self.valid_from_ordinal is not None
+            and self.valid_to_ordinal is not None
+            and self.valid_from_ordinal > self.valid_to_ordinal
+        ):
+            raise ValueError("valid_from_ordinal cannot exceed valid_to_ordinal.")
         return self
 
 
@@ -87,8 +97,8 @@ class ExtractedFact(BaseModel):
     predicate: str = Field(min_length=1, max_length=300)
     object_ref: str | None = None
     value: Any | None = None
-    valid_from_ordinal: int | None = None
-    valid_to_ordinal: int | None = None
+    valid_from_ordinal: int | None = Field(default=None, ge=0)
+    valid_to_ordinal: int | None = Field(default=None, ge=0)
     evidence: str = Field(min_length=1)
     confidence: float = Field(ge=0, le=1)
 
@@ -103,6 +113,16 @@ class ExtractedFact(BaseModel):
     def requires_object_or_value(self) -> "ExtractedFact":
         if self.object_ref is None and self.value is None:
             raise ValueError("An extracted fact requires an object reference or a value.")
+        return self
+
+    @model_validator(mode="after")
+    def temporal_range_is_ordered(self) -> "ExtractedFact":
+        if (
+            self.valid_from_ordinal is not None
+            and self.valid_to_ordinal is not None
+            and self.valid_from_ordinal > self.valid_to_ordinal
+        ):
+            raise ValueError("valid_from_ordinal cannot exceed valid_to_ordinal.")
         return self
 
 
@@ -128,6 +148,6 @@ class CanonSnapshot(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     project_id: str
-    ordinal: int
+    ordinal: int = Field(ge=0)
     entities: list[CanonEntity]
     facts: list[CanonFact]

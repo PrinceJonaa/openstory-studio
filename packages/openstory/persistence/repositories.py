@@ -1,12 +1,13 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from openstory.domain.canon import (
     CanonEntity,
     CanonFact,
+    CanonSnapshot,
     EntityKind,
     ExtractedEntity,
 )
@@ -307,6 +308,56 @@ class OpenStoryRepository:
             )
         )
         return [_canon_fact_from_record(record) for record in records]
+
+    def get_canon_snapshot(self, project_id: str, ordinal: int) -> CanonSnapshot:
+        if ordinal < 0:
+            raise ValueError("Snapshot ordinal cannot be negative.")
+        fact_records = list(
+            self.session.scalars(
+                select(CanonFactRecord)
+                .where(
+                    and_(
+                        CanonFactRecord.project_id == project_id,
+                        or_(
+                            CanonFactRecord.valid_from_ordinal.is_(None),
+                            CanonFactRecord.valid_from_ordinal <= ordinal,
+                        ),
+                        or_(
+                            CanonFactRecord.valid_to_ordinal.is_(None),
+                            CanonFactRecord.valid_to_ordinal >= ordinal,
+                        ),
+                    )
+                )
+                .order_by(CanonFactRecord.predicate, CanonFactRecord.id)
+            )
+        )
+        facts = [_canon_fact_from_record(record) for record in fact_records]
+        entity_ids = {
+            entity_id
+            for fact in facts
+            for entity_id in (fact.subject_entity_id, fact.object_entity_id)
+            if entity_id is not None
+        }
+        entity_records = (
+            list(
+                self.session.scalars(
+                    select(CanonEntityRecord)
+                    .where(
+                        CanonEntityRecord.project_id == project_id,
+                        CanonEntityRecord.id.in_(entity_ids),
+                    )
+                    .order_by(CanonEntityRecord.normalized_name, CanonEntityRecord.id)
+                )
+            )
+            if entity_ids
+            else []
+        )
+        return CanonSnapshot(
+            project_id=project_id,
+            ordinal=ordinal,
+            entities=[_canon_entity_from_record(record) for record in entity_records],
+            facts=facts,
+        )
 
     def add_job(self, job: Job) -> Job:
         self.session.add(
