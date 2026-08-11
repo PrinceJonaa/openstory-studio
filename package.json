@@ -1,0 +1,14 @@
+{
+  "name": "openstory-studio",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "web:dev": "npm --workspace @openstory/web run dev",
+    "web:build": "npm --workspace @openstory/web run build",
+    "web:test": "npm --workspace @openstory/web run test"
+  }
+}
+
