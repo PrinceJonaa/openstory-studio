@@ -4,9 +4,24 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from openstory.domain.canon import (
+    CanonEntity,
+    CanonFact,
+    EntityKind,
+    ExtractedEntity,
+)
+from openstory.domain.ids import new_id
+from openstory.domain.jobs import Job, JobKind, JobStatus
 from openstory.domain.project import Project, TargetFormat
 from openstory.domain.source import SourceChunk, SourceDocument
-from openstory.persistence.models import ProjectRecord, SourceChunkRecord, SourceDocumentRecord
+from openstory.persistence.models import (
+    CanonEntityRecord,
+    CanonFactRecord,
+    JobRecord,
+    ProjectRecord,
+    SourceChunkRecord,
+    SourceDocumentRecord,
+)
 
 
 class DuplicateProjectSlugError(ValueError):
@@ -58,6 +73,52 @@ def _source_chunk_from_record(record: SourceChunkRecord) -> SourceChunk:
         start_offset=record.start_offset,
         end_offset=record.end_offset,
     )
+
+
+def _canon_entity_from_record(record: CanonEntityRecord) -> CanonEntity:
+    return CanonEntity(
+        id=record.id,
+        project_id=record.project_id,
+        kind=EntityKind(record.kind),
+        canonical_name=record.canonical_name,
+        aliases=record.aliases,
+        summary=record.summary,
+        attributes=record.attributes,
+    )
+
+
+def _canon_fact_from_record(record: CanonFactRecord) -> CanonFact:
+    return CanonFact(
+        id=record.id,
+        project_id=record.project_id,
+        subject_entity_id=record.subject_entity_id,
+        predicate=record.predicate,
+        object_entity_id=record.object_entity_id,
+        value=record.value,
+        valid_from_ordinal=record.valid_from_ordinal,
+        valid_to_ordinal=record.valid_to_ordinal,
+        source_chunk_id=record.source_chunk_id,
+        evidence=record.evidence,
+        confidence=record.confidence,
+    )
+
+
+def _job_from_record(record: JobRecord) -> Job:
+    return Job(
+        id=record.id,
+        project_id=record.project_id,
+        kind=JobKind(record.kind),
+        status=JobStatus(record.status),
+        progress_current=record.progress_current,
+        progress_total=record.progress_total,
+        error=record.error,
+        created_at=_aware(record.created_at),
+        updated_at=_aware(record.updated_at),
+    )
+
+
+def normalize_entity_name(value: str) -> str:
+    return " ".join(value.casefold().split())
 
 
 class OpenStoryRepository:
@@ -163,9 +224,133 @@ class OpenStoryRepository:
         )
         return [_source_chunk_from_record(record) for record in records]
 
+    def resolve_entity(
+        self,
+        project_id: str,
+        candidate: ExtractedEntity,
+    ) -> CanonEntity:
+        normalized_candidate = normalize_entity_name(candidate.canonical_name)
+        records = list(
+            self.session.scalars(
+                select(CanonEntityRecord)
+                .where(CanonEntityRecord.project_id == project_id)
+                .order_by(CanonEntityRecord.id)
+            )
+        )
+        for record in records:
+            if record.normalized_name == normalized_candidate:
+                return _canon_entity_from_record(record)
+        for record in records:
+            normalized_aliases = {normalize_entity_name(alias) for alias in record.aliases}
+            if normalized_candidate in normalized_aliases:
+                return _canon_entity_from_record(record)
+
+        entity = CanonEntity(
+            id=new_id(),
+            project_id=project_id,
+            kind=candidate.kind,
+            canonical_name=candidate.canonical_name,
+            aliases=candidate.aliases,
+            summary=candidate.summary,
+            attributes=candidate.attributes,
+        )
+        self.session.add(
+            CanonEntityRecord(
+                id=entity.id,
+                project_id=project_id,
+                kind=entity.kind.value,
+                canonical_name=entity.canonical_name,
+                normalized_name=normalized_candidate,
+                aliases=entity.aliases,
+                summary=entity.summary,
+                attributes=entity.attributes,
+            )
+        )
+        self.session.flush()
+        return entity
+
+    def add_canon_fact(self, fact: CanonFact) -> CanonFact:
+        self.session.add(
+            CanonFactRecord(
+                id=fact.id,
+                project_id=fact.project_id,
+                subject_entity_id=fact.subject_entity_id,
+                predicate=fact.predicate,
+                object_entity_id=fact.object_entity_id,
+                value=fact.value,
+                valid_from_ordinal=fact.valid_from_ordinal,
+                valid_to_ordinal=fact.valid_to_ordinal,
+                source_chunk_id=fact.source_chunk_id,
+                evidence=fact.evidence,
+                confidence=fact.confidence,
+            )
+        )
+        self.session.flush()
+        return fact
+
+    def list_canon_entities(self, project_id: str) -> list[CanonEntity]:
+        records = self.session.scalars(
+            select(CanonEntityRecord)
+            .where(CanonEntityRecord.project_id == project_id)
+            .order_by(CanonEntityRecord.normalized_name, CanonEntityRecord.id)
+        )
+        return [_canon_entity_from_record(record) for record in records]
+
+    def list_canon_facts(self, project_id: str) -> list[CanonFact]:
+        records = self.session.scalars(
+            select(CanonFactRecord)
+            .where(CanonFactRecord.project_id == project_id)
+            .order_by(
+                CanonFactRecord.source_chunk_id,
+                CanonFactRecord.predicate,
+                CanonFactRecord.id,
+            )
+        )
+        return [_canon_fact_from_record(record) for record in records]
+
+    def add_job(self, job: Job) -> Job:
+        self.session.add(
+            JobRecord(
+                id=job.id,
+                project_id=job.project_id,
+                kind=job.kind.value,
+                status=job.status.value,
+                progress_current=job.progress_current,
+                progress_total=job.progress_total,
+                error=job.error,
+                created_at=job.created_at,
+                updated_at=job.updated_at,
+            )
+        )
+        self.session.commit()
+        return job
+
+    def update_job(self, job: Job) -> Job:
+        record = self.session.get(JobRecord, job.id)
+        if record is None:
+            raise LookupError("Job not found.")
+        record.status = job.status.value
+        record.progress_current = job.progress_current
+        record.progress_total = job.progress_total
+        record.error = job.error
+        record.updated_at = job.updated_at
+        self.session.commit()
+        return job
+
+    def get_job(self, job_id: str) -> Job | None:
+        record = self.session.get(JobRecord, job_id)
+        return _job_from_record(record) if record is not None else None
+
+    def list_jobs(self, project_id: str) -> list[Job]:
+        records = self.session.scalars(
+            select(JobRecord)
+            .where(JobRecord.project_id == project_id)
+            .order_by(JobRecord.created_at, JobRecord.id)
+        )
+        return [_job_from_record(record) for record in records]
+
     def commit(self) -> None:
         self.session.commit()
 
     def rollback(self) -> None:
         self.session.rollback()
-

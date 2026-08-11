@@ -2,21 +2,27 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import httpx
+import pytest
 import pytest_asyncio
+from fastapi import FastAPI
 from openstory_api.dependencies import Settings
 from openstory_api.main import create_app
 
 
-@pytest_asyncio.fixture
-async def api_client(tmp_path: Path) -> AsyncIterator[httpx.AsyncClient]:
+@pytest.fixture
+def api_app(tmp_path: Path) -> FastAPI:
     settings = Settings(
         database_url=f"sqlite+pysqlite:///{tmp_path / 'api.db'}",
         workspace_root=tmp_path / "workspaces",
         cors_origins=["http://localhost:5173"],
     )
-    app = create_app(settings)
-    async with app.router.lifespan_context(app), httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app),
+    return create_app(settings)
+
+
+@pytest_asyncio.fixture
+async def api_client(api_app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    async with api_app.router.lifespan_context(api_app), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=api_app),
         base_url="http://test",
     ) as client:
         yield client
@@ -30,4 +36,3 @@ async def api_project(api_client: httpx.AsyncClient) -> dict[str, object]:
     )
     assert response.status_code == 201
     return response.json()
-

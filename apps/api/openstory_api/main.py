@@ -4,13 +4,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openstory.persistence.db import create_db_engine, init_db, make_session_factory
+from openstory.providers.text.base import TextGenerationProvider
+from openstory.providers.text.mock import MockTextProvider
 from openstory.services.workspace import WorkspaceManager
 
 from openstory_api.dependencies import Settings
-from openstory_api.routes import health, projects, sources
+from openstory_api.routes import canon, health, jobs, projects, sources
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    text_provider: TextGenerationProvider | None = None,
+) -> FastAPI:
     resolved_settings = settings or Settings()
     engine = create_db_engine(resolved_settings.database_url)
     session_factory = make_session_factory(engine)
@@ -26,6 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application = FastAPI(title="OpenStory Studio API", lifespan=lifespan)
     application.state.session_factory = session_factory
     application.state.workspace_manager = workspace_manager
+    application.state.text_provider = text_provider or MockTextProvider()
     application.add_middleware(
         CORSMiddleware,
         allow_origins=resolved_settings.cors_origins,
@@ -36,6 +42,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(health.router)
     application.include_router(projects.router)
     application.include_router(sources.router)
+    application.include_router(canon.router)
+    application.include_router(jobs.router)
     return application
 
 

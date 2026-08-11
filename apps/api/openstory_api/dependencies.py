@@ -4,6 +4,7 @@ from typing import Annotated, cast
 
 from fastapi import Depends, Request
 from openstory.persistence.repositories import OpenStoryRepository
+from openstory.providers.text.base import TextGenerationProvider
 from openstory.services.workspace import WorkspaceManager
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,5 +45,10 @@ def get_workspace_manager(request: Request) -> WorkspaceManager:
     return cast(WorkspaceManager, request.app.state.workspace_manager)
 
 
+def get_text_provider(request: Request) -> TextGenerationProvider:
+    return cast(TextGenerationProvider, request.app.state.text_provider)
+
+
 RepositoryDependency = Annotated[OpenStoryRepository, Depends(get_repository)]
 WorkspaceDependency = Annotated[WorkspaceManager, Depends(get_workspace_manager)]
+TextProviderDependency = Annotated[TextGenerationProvider, Depends(get_text_provider)]
